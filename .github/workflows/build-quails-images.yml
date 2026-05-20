@@ -22,7 +22,7 @@ on:
       node_version:
         description: "Node.js version"
         required: true
-        default: "24.11.0"
+        default: "24.15.0"
       debug:
         description: "Include debug packages in base image"
         type: boolean
@@ -39,7 +39,7 @@ env:
   BASE_REPO: quails-base
   BUILD_REPO: quails-build
   DEFAULT_RUBY_VERSION: "4.0.4"
-  DEFAULT_NODE_VERSION: "24.11.0"
+  DEFAULT_NODE_VERSION: "24.15.0"
 
 permissions:
   id-token: write
