@@ -54,9 +54,7 @@ jobs:
       debug: ${{ steps.vars.outputs.debug }}
       timestamp: ${{ steps.vars.outputs.timestamp }}
       base_tag: ${{ steps.vars.outputs.base_tag }}
-      base_latest_tag: ${{ steps.vars.outputs.base_latest_tag }}
       build_tag: ${{ steps.vars.outputs.build_tag }}
-      build_latest_tag: ${{ steps.vars.outputs.build_latest_tag }}
     steps:
       - id: vars
         run: |
@@ -65,18 +63,14 @@ jobs:
           debug="${{ inputs.debug || 'false' }}"
           ts="$(date -u +%Y%m%d-%H%M%S)"
           base_tag="ruby${ruby}-${ts}"
-          base_latest="ruby${ruby}-latest"
           build_tag="ruby${ruby}-node${node}-${ts}"
-          build_latest="ruby${ruby}-node${node}-latest"
           {
             echo "ruby_version=${ruby}"
             echo "node_version=${node}"
             echo "debug=${debug}"
             echo "timestamp=${ts}"
             echo "base_tag=${base_tag}"
-            echo "base_latest_tag=${base_latest}"
             echo "build_tag=${build_tag}"
-            echo "build_latest_tag=${build_latest}"
           } >> "$GITHUB_OUTPUT"
           echo "Will build:"
           echo "  ${ECR_REGISTRY}/${BASE_REPO}:${base_tag}"
@@ -158,7 +152,6 @@ jobs:
         run: |
           docker buildx imagetools create \
             -t "${ECR_REGISTRY}/${BASE_REPO}:${{ needs.setup.outputs.base_tag }}" \
-            -t "${ECR_REGISTRY}/${BASE_REPO}:${{ needs.setup.outputs.base_latest_tag }}" \
             $(printf "${ECR_REGISTRY}/${BASE_REPO}@sha256:%s " *)
 
       - name: Inspect
@@ -245,7 +238,6 @@ jobs:
         run: |
           docker buildx imagetools create \
             -t "${ECR_REGISTRY}/${BUILD_REPO}:${{ needs.setup.outputs.build_tag }}" \
-            -t "${ECR_REGISTRY}/${BUILD_REPO}:${{ needs.setup.outputs.build_latest_tag }}" \
             $(printf "${ECR_REGISTRY}/${BUILD_REPO}@sha256:%s " *)
 
       - name: Inspect
