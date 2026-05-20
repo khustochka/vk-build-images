@@ -1,0 +1,178 @@
+name: Build quails images
+
+# Builds and pushes quails-base and quails-build images to ECR Public.
+#
+# Required repo configuration:
+#   secrets.AWS_ROLE_ARN   - IAM role assumable via GitHub OIDC. The role needs:
+#                              ecr-public:GetAuthorizationToken
+#                              ecr-public:BatchCheckLayerAvailability
+#                              ecr-public:InitiateLayerUpload
+#                              ecr-public:UploadLayerPart
+#                              ecr-public:CompleteLayerUpload
+#                              ecr-public:PutImage
+#                              sts:GetServiceBearerToken
+#                            and a trust policy allowing token.actions.githubusercontent.com
+#                            for this repo.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ruby_version:
+        description: "Ruby version (e.g. 4.0.4)"
+        required: true
+        default: "4.0.4"
+      node_version:
+        description: "Node.js version (e.g. 24.11.0)"
+        required: true
+        default: "24.11.0"
+      debug:
+        description: "Include debug packages in base image"
+        type: boolean
+        required: true
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - "quails/**"
+      - ".github/workflows/build-quails-images.yml"
+
+env:
+  ECR_REGISTRY: public.ecr.aws/m7x1i1o0
+  BASE_REPO: quails-base
+  BUILD_REPO: quails-build
+  # Defaults used when triggered by push (no workflow_dispatch inputs available).
+  DEFAULT_RUBY_VERSION: "4.0.4"
+  DEFAULT_NODE_VERSION: "24.11.0"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      ruby_version: ${{ steps.vars.outputs.ruby_version }}
+      node_version: ${{ steps.vars.outputs.node_version }}
+      debug: ${{ steps.vars.outputs.debug }}
+      timestamp: ${{ steps.vars.outputs.timestamp }}
+      base_tag: ${{ steps.vars.outputs.base_tag }}
+      base_latest_tag: ${{ steps.vars.outputs.base_latest_tag }}
+      build_tag: ${{ steps.vars.outputs.build_tag }}
+      build_latest_tag: ${{ steps.vars.outputs.build_latest_tag }}
+    steps:
+      - id: vars
+        run: |
+          ruby="${{ inputs.ruby_version || env.DEFAULT_RUBY_VERSION }}"
+          node="${{ inputs.node_version || env.DEFAULT_NODE_VERSION }}"
+          debug="${{ inputs.debug || 'false' }}"
+          ts="$(date -u +%Y%m%d-%H%M%S)"
+          base_tag="ruby${ruby}-${ts}"
+          base_latest="ruby${ruby}-latest"
+          build_tag="ruby${ruby}-node${node}-${ts}"
+          build_latest="ruby${ruby}-node${node}-latest"
+          {
+            echo "ruby_version=${ruby}"
+            echo "node_version=${node}"
+            echo "debug=${debug}"
+            echo "timestamp=${ts}"
+            echo "base_tag=${base_tag}"
+            echo "base_latest_tag=${base_latest}"
+            echo "build_tag=${build_tag}"
+            echo "build_latest_tag=${build_latest}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Will build:"
+          echo "  ${ECR_REGISTRY}/${BASE_REPO}:${base_tag}"
+          echo "  ${ECR_REGISTRY}/${BUILD_REPO}:${build_tag}"
+
+  base:
+    needs: setup
+    runs-on: ubuntu-latest
+    outputs:
+      image_ref: ${{ steps.ref.outputs.image_ref }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+        with:
+          registry-type: public
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: quails
+          file: quails/base.Dockerfile
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.BASE_REPO }}:${{ needs.setup.outputs.base_tag }}
+            ${{ env.ECR_REGISTRY }}/${{ env.BASE_REPO }}:${{ needs.setup.outputs.base_latest_tag }}
+          build-args: |
+            RUBY_VERSION=${{ needs.setup.outputs.ruby_version }}
+            DEBUG=${{ needs.setup.outputs.debug }}
+          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.BASE_REPO }}:${{ needs.setup.outputs.base_latest_tag }}
+          cache-to: type=inline
+
+      - id: ref
+        run: |
+          echo "image_ref=${ECR_REGISTRY}/${BASE_REPO}:${{ needs.setup.outputs.base_tag }}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [setup, base]
+    runs-on: ubuntu-latest
+    outputs:
+      image_ref: ${{ steps.ref.outputs.image_ref }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: quails
+          file: quails/build.Dockerfile
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.BUILD_REPO }}:${{ needs.setup.outputs.build_tag }}
+            ${{ env.ECR_REGISTRY }}/${{ env.BUILD_REPO }}:${{ needs.setup.outputs.build_latest_tag }}
+          build-args: |
+            BASE_IMAGE=${{ needs.base.outputs.image_ref }}
+            NODE_VERSION=${{ needs.setup.outputs.node_version }}
+          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.BUILD_REPO }}:${{ needs.setup.outputs.build_latest_tag }}
+          cache-to: type=inline
+
+      - id: ref
+        run: |
+          echo "image_ref=${ECR_REGISTRY}/${BUILD_REPO}:${{ needs.setup.outputs.build_tag }}" >> "$GITHUB_OUTPUT"
+
+  summary:
+    needs: [setup, base, build]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          {
+            echo "### Images pushed"
+            echo ""
+            echo "- \`${{ needs.base.outputs.image_ref }}\`"
+            echo "- \`${{ needs.build.outputs.image_ref }}\`"
+            echo ""
+            echo "Ruby: \`${{ needs.setup.outputs.ruby_version }}\`  "
+            echo "Node: \`${{ needs.setup.outputs.node_version }}\`  "
+            echo "Debug: \`${{ needs.setup.outputs.debug }}\`  "
+            echo "Timestamp: \`${{ needs.setup.outputs.timestamp }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
