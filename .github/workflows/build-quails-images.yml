@@ -264,3 +264,26 @@ jobs:
             echo "Debug: \`${{ needs.setup.outputs.debug }}\`  "
             echo "Timestamp: \`${{ needs.setup.outputs.timestamp }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  dispatch-quails:
+    needs: [setup, base-merge, build-merge]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send repository_dispatch to quails
+        env:
+          GH_TOKEN: ${{ secrets.QUAILS_DISPATCH_TOKEN }}
+          BASE_IMAGE: ${{ needs.base-merge.outputs.image_ref }}
+          BUILD_IMAGE: ${{ needs.build-merge.outputs.image_ref }}
+          RUBY_VERSION: ${{ needs.setup.outputs.ruby_version }}
+          NODE_VERSION: ${{ needs.setup.outputs.node_version }}
+          TIMESTAMP: ${{ needs.setup.outputs.timestamp }}
+          SOURCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api repos/khustochka/quails/dispatches \
+            -f event_type=build-images-published \
+            -f "client_payload[base_image]=${BASE_IMAGE}" \
+            -f "client_payload[build_image]=${BUILD_IMAGE}" \
+            -f "client_payload[ruby_version]=${RUBY_VERSION}" \
+            -f "client_payload[node_version]=${NODE_VERSION}" \
+            -f "client_payload[timestamp]=${TIMESTAMP}" \
+            -f "client_payload[source_run_url]=${SOURCE_RUN_URL}"
