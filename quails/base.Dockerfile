@@ -4,7 +4,7 @@
 # Consumed by the final stage of quails/Dockerfile.
 # Contains no app-specific config (no user, no WORKDIR, no env tuning).
 
-ARG RUBY_VERSION=4.0.4
+ARG RUBY_VERSION
 ARG VARIANT=slim-trixie
 FROM ruby:${RUBY_VERSION}-${VARIANT}
 

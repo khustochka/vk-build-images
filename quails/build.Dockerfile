@@ -8,7 +8,7 @@ FROM ${BASE_IMAGE}
 
 ARG BUILD_PACKAGES="git build-essential libpq-dev libjpeg62-turbo-dev wget curl gzip xz-utils libsqlite3-dev libssl-dev libyaml-dev"
 
-ARG NODE_VERSION=24.11.0
+ARG NODE_VERSION
 ARG YARN_VERSION=1.22.19
 
 RUN --mount=type=cache,id=build-apt-cache,sharing=locked,target=/var/cache/apt \

@@ -1,4 +1,4 @@
-name: Build quails images
+name: Build Quails images
 
 # Builds and pushes multi-arch (amd64 + arm64) quails-base and quails-build
 # images to ECR Public.
@@ -16,11 +16,11 @@ on:
   workflow_dispatch:
     inputs:
       ruby_version:
-        description: "Ruby version (e.g. 4.0.4)"
+        description: "Ruby version"
         required: true
         default: "4.0.4"
       node_version:
-        description: "Node.js version (e.g. 24.11.0)"
+        description: "Node.js version"
         required: true
         default: "24.11.0"
       debug:
