@@ -28,11 +28,11 @@ on:
         type: boolean
         required: true
         default: false
-  push:
-    branches: [main]
-    paths:
-      - "quails/**"
-      - ".github/workflows/build-quails-images.yml"
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - "quails/**"
+  #     - ".github/workflows/build-quails-images.yml"
 
 env:
   ECR_REGISTRY: public.ecr.aws/m7x1i1o0
