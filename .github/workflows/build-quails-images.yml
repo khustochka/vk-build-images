@@ -117,7 +117,7 @@ jobs:
           digest="${{ steps.push.outputs.digest }}"
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: base-digests-${{ matrix.arch.name }}
           path: ${{ runner.temp }}/digests/*
@@ -203,7 +203,7 @@ jobs:
           digest="${{ steps.push.outputs.digest }}"
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: build-digests-${{ matrix.arch.name }}
           path: ${{ runner.temp }}/digests/*
