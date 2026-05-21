@@ -18,7 +18,7 @@ on:
       ruby_version:
         description: "Ruby version"
         required: true
-        default: "4.0.4"
+        default: "4.0.5"
       node_version:
         description: "Node.js version"
         required: true
@@ -38,7 +38,7 @@ env:
   ECR_REGISTRY: public.ecr.aws/m7x1i1o0
   BASE_REPO: quails-base
   BUILD_REPO: quails-build
-  DEFAULT_RUBY_VERSION: "4.0.4"
+  DEFAULT_RUBY_VERSION: "4.0.5"
   DEFAULT_NODE_VERSION: "24.15.0"
 
 permissions:
