@@ -100,7 +100,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: quails
           file: quails/base.Dockerfile
@@ -186,7 +186,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: quails
           file: quails/build.Dockerfile
