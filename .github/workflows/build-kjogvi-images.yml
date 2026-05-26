@@ -1,0 +1,319 @@
+name: Build Kjogvi images
+
+# Builds and pushes multi-arch (amd64 + arm64) kjogvi-base and kjogvi-build
+# images to ECR Public.
+#
+# Unlike quails, the two kjogvi images are independent: base is debian:trixie
+# (runtime), build is hexpm/elixir:...-debian-trixie-... (toolchain). They
+# share a DEBIAN_VERSION so the runtime libs match what the release was built
+# against, but the build image does not FROM the base image.
+#
+# Per-arch builds run on native runners (ubuntu-24.04 for amd64,
+# ubuntu-24.04-arm for arm64), push by digest, then a merge step assembles a
+# multi-arch manifest list pointing to both digests.
+#
+# Required repo configuration:
+#   secrets.AWS_ROLE_ARN          - IAM role assumable via GitHub OIDC. Needs
+#                                   ecr-public push permissions on kjogvi-base
+#                                   and kjogvi-build, plus
+#                                   sts:GetServiceBearerToken.
+#   secrets.KJOGVI_DISPATCH_TOKEN - GitHub token with `repo` scope on
+#                                   khustochka/kjogvi (for repository_dispatch).
+
+on:
+  workflow_dispatch:
+    inputs:
+      elixir_version:
+        description: "Elixir version"
+        required: true
+        default: "1.19.5"
+      otp_version:
+        description: "Erlang/OTP version"
+        required: true
+        default: "28.3.1"
+      debian_version:
+        description: "Debian tag (e.g. trixie-20260112)"
+        required: true
+        default: "trixie-20260112"
+      node_version:
+        description: "Node.js version"
+        required: true
+        default: "24.15.0"
+      debug:
+        description: "Include debug packages in base image"
+        type: boolean
+        required: true
+        default: false
+
+env:
+  ECR_REGISTRY: public.ecr.aws/m7x1i1o0
+  BASE_REPO: kjogvi-base
+  BUILD_REPO: kjogvi-build
+  DEFAULT_ELIXIR_VERSION: "1.19.5"
+  DEFAULT_OTP_VERSION: "28.3.1"
+  DEFAULT_DEBIAN_VERSION: "trixie-20260112"
+  DEFAULT_NODE_VERSION: "24.15.0"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      elixir_version: ${{ steps.vars.outputs.elixir_version }}
+      otp_version: ${{ steps.vars.outputs.otp_version }}
+      debian_version: ${{ steps.vars.outputs.debian_version }}
+      node_version: ${{ steps.vars.outputs.node_version }}
+      debug: ${{ steps.vars.outputs.debug }}
+      timestamp: ${{ steps.vars.outputs.timestamp }}
+      base_tag: ${{ steps.vars.outputs.base_tag }}
+      build_tag: ${{ steps.vars.outputs.build_tag }}
+    steps:
+      - id: vars
+        run: |
+          elixir="${{ inputs.elixir_version || env.DEFAULT_ELIXIR_VERSION }}"
+          otp="${{ inputs.otp_version || env.DEFAULT_OTP_VERSION }}"
+          debian="${{ inputs.debian_version || env.DEFAULT_DEBIAN_VERSION }}"
+          node="${{ inputs.node_version || env.DEFAULT_NODE_VERSION }}"
+          debug="${{ inputs.debug || 'false' }}"
+          ts="$(date -u +%Y%m%d-%H%M%S)"
+          base_tag="debian${debian}-${ts}"
+          build_tag="elixir${elixir}-otp${otp}-debian${debian}-node${node}-${ts}"
+          {
+            echo "elixir_version=${elixir}"
+            echo "otp_version=${otp}"
+            echo "debian_version=${debian}"
+            echo "node_version=${node}"
+            echo "debug=${debug}"
+            echo "timestamp=${ts}"
+            echo "base_tag=${base_tag}"
+            echo "build_tag=${build_tag}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Will build:"
+          echo "  ${ECR_REGISTRY}/${BASE_REPO}:${base_tag}"
+          echo "  ${ECR_REGISTRY}/${BUILD_REPO}:${build_tag}"
+
+  base-build:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - { name: amd64, platform: linux/amd64, runner: ubuntu-24.04 }
+          - { name: arm64, platform: linux/arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.arch.runner }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - uses: docker/setup-buildx-action@v4
+
+      - id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: kjogvi
+          file: kjogvi/base.Dockerfile
+          platforms: ${{ matrix.arch.platform }}
+          push: true
+          build-args: |
+            DEBIAN_VERSION=${{ needs.setup.outputs.debian_version }}
+            DEBUG=${{ needs.setup.outputs.debug }}
+          outputs: type=image,name=${{ env.ECR_REGISTRY }}/${{ env.BASE_REPO }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.push.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: base-digests-${{ matrix.arch.name }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  base-merge:
+    needs: [setup, base-build]
+    runs-on: ubuntu-latest
+    outputs:
+      image_ref: ${{ steps.ref.outputs.image_ref }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: base-digests-*
+          merge-multiple: true
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create \
+            -t "${ECR_REGISTRY}/${BASE_REPO}:${{ needs.setup.outputs.base_tag }}" \
+            $(printf "${ECR_REGISTRY}/${BASE_REPO}@sha256:%s " *)
+
+      - name: Inspect
+        run: |
+          docker buildx imagetools inspect "${ECR_REGISTRY}/${BASE_REPO}:${{ needs.setup.outputs.base_tag }}"
+
+      - id: ref
+        run: |
+          echo "image_ref=${ECR_REGISTRY}/${BASE_REPO}:${{ needs.setup.outputs.base_tag }}" >> "$GITHUB_OUTPUT"
+
+  build-build:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - { name: amd64, platform: linux/amd64, runner: ubuntu-24.04 }
+          - { name: arm64, platform: linux/arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.arch.runner }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - uses: docker/setup-buildx-action@v4
+
+      - id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: kjogvi
+          file: kjogvi/build.Dockerfile
+          platforms: ${{ matrix.arch.platform }}
+          push: true
+          build-args: |
+            ELIXIR_VERSION=${{ needs.setup.outputs.elixir_version }}
+            OTP_VERSION=${{ needs.setup.outputs.otp_version }}
+            DEBIAN_VERSION=${{ needs.setup.outputs.debian_version }}
+            NODE_VERSION=${{ needs.setup.outputs.node_version }}
+          outputs: type=image,name=${{ env.ECR_REGISTRY }}/${{ env.BUILD_REPO }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.push.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build-digests-${{ matrix.arch.name }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  build-merge:
+    needs: [setup, build-build]
+    runs-on: ubuntu-latest
+    outputs:
+      image_ref: ${{ steps.ref.outputs.image_ref }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: build-digests-*
+          merge-multiple: true
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create \
+            -t "${ECR_REGISTRY}/${BUILD_REPO}:${{ needs.setup.outputs.build_tag }}" \
+            $(printf "${ECR_REGISTRY}/${BUILD_REPO}@sha256:%s " *)
+
+      - name: Inspect
+        run: |
+          docker buildx imagetools inspect "${ECR_REGISTRY}/${BUILD_REPO}:${{ needs.setup.outputs.build_tag }}"
+
+      - id: ref
+        run: |
+          echo "image_ref=${ECR_REGISTRY}/${BUILD_REPO}:${{ needs.setup.outputs.build_tag }}" >> "$GITHUB_OUTPUT"
+
+  summary:
+    needs: [setup, base-merge, build-merge]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          {
+            echo "### Images pushed (multi-arch: amd64 + arm64)"
+            echo ""
+            echo "- \`${{ needs.base-merge.outputs.image_ref }}\`"
+            echo "- \`${{ needs.build-merge.outputs.image_ref }}\`"
+            echo ""
+            echo "Elixir: \`${{ needs.setup.outputs.elixir_version }}\`  "
+            echo "OTP: \`${{ needs.setup.outputs.otp_version }}\`  "
+            echo "Debian: \`${{ needs.setup.outputs.debian_version }}\`  "
+            echo "Node: \`${{ needs.setup.outputs.node_version }}\`  "
+            echo "Debug: \`${{ needs.setup.outputs.debug }}\`  "
+            echo "Timestamp: \`${{ needs.setup.outputs.timestamp }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  dispatch-kjogvi:
+    # Disabled until the kjogvi repo is ready to consume these images.
+    # Flip this to `true` (or remove the line) to re-enable.
+    if: false
+    needs: [setup, base-merge, build-merge]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send repository_dispatch to kjogvi
+        env:
+          GH_TOKEN: ${{ secrets.KJOGVI_DISPATCH_TOKEN }}
+          BASE_IMAGE: ${{ needs.base-merge.outputs.image_ref }}
+          BUILD_IMAGE: ${{ needs.build-merge.outputs.image_ref }}
+          ELIXIR_VERSION: ${{ needs.setup.outputs.elixir_version }}
+          OTP_VERSION: ${{ needs.setup.outputs.otp_version }}
+          DEBIAN_VERSION: ${{ needs.setup.outputs.debian_version }}
+          NODE_VERSION: ${{ needs.setup.outputs.node_version }}
+          TIMESTAMP: ${{ needs.setup.outputs.timestamp }}
+          SOURCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api repos/khustochka/kjogvi/dispatches \
+            -f event_type=build-images-published \
+            -f "client_payload[base_image]=${BASE_IMAGE}" \
+            -f "client_payload[build_image]=${BUILD_IMAGE}" \
+            -f "client_payload[elixir_version]=${ELIXIR_VERSION}" \
+            -f "client_payload[otp_version]=${OTP_VERSION}" \
+            -f "client_payload[debian_version]=${DEBIAN_VERSION}" \
+            -f "client_payload[node_version]=${NODE_VERSION}" \
+            -f "client_payload[timestamp]=${TIMESTAMP}" \
+            -f "client_payload[source_run_url]=${SOURCE_RUN_URL}"
