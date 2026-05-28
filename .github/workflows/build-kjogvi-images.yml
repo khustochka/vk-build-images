@@ -30,15 +30,15 @@ on:
       otp_version:
         description: "Erlang/OTP version"
         required: true
-        default: "28.3.1"
+        default: "28.5.0.1"
       debian_version:
         description: "Debian tag (e.g. trixie-20260112)"
         required: true
-        default: "trixie-20260112"
+        default: "trixie-20260518"
       node_version:
         description: "Node.js version"
         required: true
-        default: "24.15.0"
+        default: "24.16.0"
       debug:
         description: "Include debug packages in base image"
         type: boolean
