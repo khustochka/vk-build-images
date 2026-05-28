@@ -30,7 +30,7 @@ on:
       otp_version:
         description: "Erlang/OTP version"
         required: true
-        default: "28.5.0.1"
+        default: "28.5"
       debian_version:
         description: "Debian tag (e.g. trixie-20260112)"
         required: true
@@ -50,7 +50,7 @@ env:
   BASE_REPO: kjogvi-base
   BUILD_REPO: kjogvi-build
   DEFAULT_ELIXIR_VERSION: "1.19.5"
-  DEFAULT_OTP_VERSION: "28.5.0.1"
+  DEFAULT_OTP_VERSION: "28.5"
   DEFAULT_DEBIAN_VERSION: "trixie-20260518"
   DEFAULT_NODE_VERSION: "24.16.0"
 
