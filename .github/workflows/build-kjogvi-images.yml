@@ -26,11 +26,11 @@ on:
       elixir_version:
         description: "Elixir version"
         required: true
-        default: "1.19.5"
+        default: "1.20.0"
       otp_version:
         description: "Erlang/OTP version"
         required: true
-        default: "28.5.0.1"
+        default: "29.0.1"
       debian_version:
         description: "Debian tag (e.g. trixie-20260112)"
         required: true
@@ -49,8 +49,8 @@ env:
   ECR_REGISTRY: public.ecr.aws/m7x1i1o0
   BASE_REPO: kjogvi-base
   BUILD_REPO: kjogvi-build
-  DEFAULT_ELIXIR_VERSION: "1.19.5"
-  DEFAULT_OTP_VERSION: "28.5.0.1"
+  DEFAULT_ELIXIR_VERSION: "1.20.0"
+  DEFAULT_OTP_VERSION: "29.0.1"
   DEFAULT_DEBIAN_VERSION: "trixie-20260518"
   DEFAULT_NODE_VERSION: "24.16.0"
 
