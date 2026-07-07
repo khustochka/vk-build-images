@@ -26,19 +26,19 @@ on:
       elixir_version:
         description: "Elixir version"
         required: true
-        default: "1.20.1"
+        default: "1.20.2"
       otp_version:
         description: "Erlang/OTP version"
         required: true
-        default: "29.0.1"
+        default: "29.0.3"
       debian_version:
         description: "Debian tag (e.g. trixie-20260112)"
         required: true
-        default: "trixie-20260518"
+        default: "trixie-20260623"
       node_version:
         description: "Node.js version"
         required: true
-        default: "24.16.0"
+        default: "24.18.0"
       debug:
         description: "Include debug packages in base image"
         type: boolean
@@ -49,10 +49,10 @@ env:
   ECR_REGISTRY: public.ecr.aws/m7x1i1o0
   BASE_REPO: kjogvi-base
   BUILD_REPO: kjogvi-build
-  DEFAULT_ELIXIR_VERSION: "1.20.1"
-  DEFAULT_OTP_VERSION: "29.0.1"
-  DEFAULT_DEBIAN_VERSION: "trixie-20260518"
-  DEFAULT_NODE_VERSION: "24.16.0"
+  DEFAULT_ELIXIR_VERSION: "1.20.2"
+  DEFAULT_OTP_VERSION: "29.0.3"
+  DEFAULT_DEBIAN_VERSION: "trixie-20260623"
+  DEFAULT_NODE_VERSION: "24.18.0"
 
 permissions:
   id-token: write
