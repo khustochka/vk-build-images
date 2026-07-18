@@ -7,7 +7,7 @@
 ARG DEBIAN_VERSION=
 FROM debian:${DEBIAN_VERSION}
 
-ARG DEPLOY_PACKAGES="libstdc++6 openssl libncurses6 locales ca-certificates postgresql-client file curl gzip bzip2"
+ARG DEPLOY_PACKAGES="libsctp1 libvips42 libstdc++6 openssl libncurses6 locales ca-certificates postgresql-client file curl gzip bzip2"
 ARG DEBUG_PACKAGES="net-tools netcat-openbsd bind9-dnsutils procps"
 ARG DEBUG=false
 

@@ -12,7 +12,9 @@ ARG OTP_VERSION
 ARG DEBIAN_VERSION
 FROM hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}
 
-ARG BUILD_PACKAGES="build-essential git curl xz-utils"
+ARG BUILD_PACKAGES="build-essential git curl xz-utils libvips-dev"
+
+ENV VIX_COMPILATION_MODE PLATFORM_PROVIDED_LIBVIPS
 
 ARG NODE_VERSION
 
