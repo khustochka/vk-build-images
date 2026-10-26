@@ -18,11 +18,11 @@ on:
       ruby_version:
         description: "Ruby version"
         required: true
-        default: "4.0.7"
+        default: "4.0.9"
       node_version:
         description: "Node.js version"
         required: true
-        default: "24.19.0"
+        default: "24.22.1"
       debug:
         description: "Include debug packages in base image"
         type: boolean
@@ -38,8 +38,8 @@ env:
   ECR_REGISTRY: public.ecr.aws/m7x1i1o0
   BASE_REPO: quails-base
   BUILD_REPO: quails-build
-  DEFAULT_RUBY_VERSION: "4.0.7"
-  DEFAULT_NODE_VERSION: "24.19.0"
+  DEFAULT_RUBY_VERSION: "4.0.9"
+  DEFAULT_NODE_VERSION: "24.22.1"
 
 permissions:
   id-token: write
